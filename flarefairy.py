@@ -33,6 +33,10 @@ class FlareFairy:
     def __init__(self, flc, flare, amax=5., dmax=5., DISCRETE_OS_SIZE=[20, 20],
                  LEARNING_RATE=.5, DISCOUNT=.75):
         
+        self.DISCRETE_OS_SIZE = DISCRETE_OS_SIZE 
+        self.LEARNING_RATE = LEARNING_RATE
+        self.DISCOUNT = DISCOUNT
+        
         
         self.flc = flc
         self.flare = flare
@@ -43,7 +47,7 @@ class FlareFairy:
         
         self.discrete_os_win_size = ((np.array([self.amax,self.dmax]) -
                                       np.array([self.amin,self.dmin])) /
-                                     DISCRETE_OS_SIZE )
+                                     self.DISCRETE_OS_SIZE )
         self.astep = self.discrete_os_win_size[0]
         self.dstep = self.discrete_os_win_size[1]
         self.steps = {0:[0,self.astep,self.amax*.999, min],
@@ -62,7 +66,7 @@ class FlareFairy:
         self.get_reward()
         self.is_done()
         
-        self.q_table = np.random.uniform(low=self.min_reward, high=0, size=(DISCRETE_OS_SIZE + [len(self.steps)]))
+        self.q_table = np.random.uniform(low=self.min_reward, high=0, size=(self.DISCRETE_OS_SIZE + [len(self.steps)]))
        
     def reset(self):
         self.state = [np.random.uniform(low=self.amin, high=self.amax),
@@ -81,15 +85,19 @@ class FlareFairy:
     def evaluate(self):
         try:
             flc, fake_lc = self.flc.sample_flare_recovery(inject_before_detrending=False,# mode="savgol",
-                                              iterations=1, fakefreq=1e-5, show_progress=False,
+                                              iterations=1, fakefreq=1e-5, #show_progress=False,
                                               ampl=[self.state[0]-self.astep/4,self.state[0]+self.astep/4],
                                               dur=[self.state[1]-self.dstep/4,self.state[1]+self.dstep/4])
+          
             res = flc.fake_flares.iloc[0]
+           
             self.injections = self.injections.append(res,ignore_index=True)
+           
             self.recovered = [res.ampl_rec, res.dur]
+            
             self.full_recovered = res
-        except:#somethin goes wrong with injection recovery
-            print("EXCEPTION")
+        except Exception as e: #somethin goes wrong with injection recovery
+            print("EXCEPTION: ", e)
             self.recovered = [np.nan, np.nan]
             
         
@@ -125,7 +133,7 @@ class FlareFairy:
             else:
                 # Get random action
                 x = np.random.randint(0, len(self.steps))
-
+            print("0000000")
             newstate = self.action(x)
 
             # Maximum possible Q value in next step (for new state)
@@ -135,7 +143,7 @@ class FlareFairy:
             current_q = self.q_table[currentstate + (x,)]
 
             # And here's our equation for a new Q value for current state and action
-            new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (self.reward + DISCOUNT * max_future_q)
+            new_q = (1 - self.LEARNING_RATE) * current_q + self.LEARNING_RATE * (self.reward + self.DISCOUNT * max_future_q)
             print("currentQ, newQ ", current_q, new_q)
             # Update Q table with new Q value
             self.q_table[currentstate + (x,)] = new_q
