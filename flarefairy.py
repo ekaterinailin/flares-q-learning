@@ -28,6 +28,16 @@ class FlareFairy:
     flare : pandas.Series object
         contains values for "ampl_rec", "dur", can be a row
         from flc.flares
+    amax : float
+        factor that determines the minium and 
+        maximum injected flare amplitudes on the grid
+    dmax : float
+        factor that determines the minium and 
+        maximum injected flare fwhm on the grid
+    DISCRETE_OS_SIZE : [int, int]
+        dimensions of q table
+    LEARNING_RATE: float < 1
+    DISCOUT: float < 1
     """
     
     def __init__(self, flc, flare, amax=5., dmax=5., DISCRETE_OS_SIZE=[20, 20],
@@ -40,32 +50,49 @@ class FlareFairy:
         
         self.flc = flc
         self.flare = flare
-        self.amax = flare.ampl_rec * amax
-        self.dmax = flare.dur * dmax / 6
-        self.amin = flare.ampl_rec / amax
-        self.dmin = flare.dur / dmax /6
+        self.amax = flare.ampl_rec * amax # maximum flare amplitude on the grid
+        self.dmax = flare.dur * dmax / 6 # maximum flare fwhm on the grid
+        self.amin = flare.ampl_rec / amax # minimum flare amplitude on the grid 
+        self.dmin = flare.dur / dmax / 6 # minimum flare fwhm on the grid
         
+        # set up window size for q table
         self.discrete_os_win_size = ((np.array([self.amax,self.dmax]) -
                                       np.array([self.amin,self.dmin])) /
                                      self.DISCRETE_OS_SIZE )
+        # get step size for amplitude
         self.astep = self.discrete_os_win_size[0]
+        # get step size for amplitude
         self.dstep = self.discrete_os_win_size[1]
+        # define steps 0-3
+        # each step is [axis, step size and direction, upper/lower bound, function]
         self.steps = {0:[0,self.astep,self.amax*.999, min],
                       1:[0,-self.astep,self.amin, max],
                       2:[1,self.dstep,self.dmax*.999, min],
                       3:[1,-self.dstep, self.dmin,max]}
+        # in the beginning the fairy assumes that the injected flare is roughly the 
+        # same as the detected one
         self.state = [flare.ampl_rec, flare.dur / 6]
+        
+        # we have not yet recovered anything 
         self.recovered = [np.nan, np.nan]
+        
+        # in the end we want the recovered flare to match the observed one
         self.goal = [flare.ampl_rec, flare.dur]
 
+        # optionally set weights in the reward function
+        self.weights = [1.,1.]
         
-        self.weights = [1e-1,1.]
+        # define a minimum reward
         self.min_reward = -1.
         
+        # save injections to table
         self.injections = pd.DataFrame()
+        
+        # get initial reward and check if we are already done
         self.get_reward()
         self.is_done()
         
+        # define q table
         self.q_table = np.random.uniform(low=self.min_reward, high=0, size=(self.DISCRETE_OS_SIZE + [len(self.steps)]))
        
     def reset(self):
@@ -133,7 +160,7 @@ class FlareFairy:
             else:
                 # Get random action
                 x = np.random.randint(0, len(self.steps))
-            print("0000000")
+           
             newstate = self.action(x)
 
             # Maximum possible Q value in next step (for new state)
